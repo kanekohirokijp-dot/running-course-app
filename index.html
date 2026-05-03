@@ -121,7 +121,7 @@ main { max-width: 520px; margin: 0 auto; padding: 20px 16px 60px; display: flex;
 
 <script>
 // ★ここにAPIキーを貼り付けてください★
-const ORS_API_KEY = 'YOUR_API_KEY_HERE';
+const ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdhNDI0MDdjOGNkMjQ2M2ViYjRjODg1OTA3YmQ4OWI0IiwiaCI6Im11cm11cjY0In0=';
 
 let map, userMarker, routeLayer, markerLayer;
 let userLat = null, userLng = null;
@@ -176,7 +176,7 @@ function generateWaypoints(lat, lng, radiusM, count) {
 }
 
 async function generateCourse() {
-  if (ORS_API_KEY === 'YOUR_API_KEY_HERE') {
+  if (ORS_API_KEY === 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdhNDI0MDdjOGNkMjQ2M2ViYjRjODg1OTA3YmQ4OWI0IiwiaCI6Im11cm11cjY0In0=') {
     setStatus('APIキーを設定してください。index.html の ORS_API_KEY を書き換えてください。', 'error');
     return;
   }
