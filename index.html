@@ -1,1 +1,513 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>runywhere - ランニングコース生成</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --green: #1D9E75; --green-light: #E1F5EE; --green-mid: #5DCAA5;
+  --text: #1a1a1a; --text-muted: #666;
+  --border: rgba(0,0,0,0.1); --bg: #f7f8f5; --card: #ffffff; --radius: 16px;
+}
+body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
+/* ── ヘッダー ── */
+header { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; }
+.logo { width: 34px; height: 34px; background: var(--green); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.logo svg { width: 18px; height: 18px; fill: white; }
+header h1 { font-size: 16px; font-weight: 600; }
+header p { font-size: 12px; color: var(--text-muted); }
+
+/* ── レイアウト ── */
+main { max-width: 520px; margin: 0 auto; padding: 16px 16px 60px; display: flex; flex-direction: column; gap: 14px; }
+.card { background: var(--card); border-radius: var(--radius); padding: 16px 18px; border: 1px solid var(--border); }
+.card-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 12px; }
+
+/* ── インテント選択 ── */
+.intent-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.intent-btn {
+  padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--border);
+  background: transparent; font-family: 'Outfit', sans-serif; font-size: 13px;
+  font-weight: 500; color: var(--text); cursor: pointer; transition: all 0.15s;
+  text-align: left; line-height: 1.4;
+}
+.intent-btn .intent-icon { font-size: 18px; display: block; margin-bottom: 4px; }
+.intent-btn .intent-sub { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.intent-btn.active { background: var(--green-light); border-color: var(--green-mid); color: #0F6E56; }
+.intent-btn.active .intent-sub { color: #0F6E56; }
+
+/* ── 距離 ── */
+.dist-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.dist-btn { padding: 7px 18px; border-radius: 100px; border: 1.5px solid var(--border); background: transparent; font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 500; color: var(--text); cursor: pointer; transition: all 0.15s; }
+.dist-btn.active { background: var(--green); color: white; border-color: var(--green); }
+.dist-btn:hover:not(.active) { background: var(--green-light); border-color: var(--green-mid); }
+.custom-row { display: flex; align-items: center; gap: 8px; }
+.custom-row input { width: 100px; padding: 7px 12px; border-radius: 10px; border: 1.5px solid var(--border); font-family: 'Outfit', sans-serif; font-size: 14px; background: var(--bg); color: var(--text); outline: none; transition: border-color 0.15s; }
+.custom-row input:focus { border-color: var(--green); }
+.custom-row span { font-size: 14px; color: var(--text-muted); }
+
+/* ── コースタイプ ── */
+.type-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.type-btn { padding: 6px 14px; border-radius: 100px; border: 1.5px solid var(--border); background: transparent; font-family: 'Outfit', sans-serif; font-size: 13px; color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+.type-btn.active { background: var(--green-light); color: #0F6E56; border-color: var(--green-mid); font-weight: 500; }
+
+/* ── コース条件タグ ── */
+.tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag { padding: 6px 14px; border-radius: 100px; border: 1.5px solid var(--border); font-family: 'Outfit', sans-serif; font-size: 13px; color: var(--text-muted); cursor: pointer; transition: all 0.15s; user-select: none; }
+.tag.active { background: var(--green-light); color: #0F6E56; border-color: var(--green-mid); font-weight: 500; }
+
+/* ── 地図 ── */
+#map { height: 340px; border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+
+/* ── ボタン行 ── */
+.btn-row { display: flex; gap: 10px; }
+#generate-btn { flex: 1; padding: 15px; background: var(--green); color: white; border: none; border-radius: var(--radius); font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+#generate-btn:hover { background: #0F6E56; }
+#generate-btn:active { transform: scale(0.98); }
+#generate-btn:disabled { background: #aaa; cursor: not-allowed; transform: none; }
+#reverse-btn { padding: 15px 18px; border: 1.5px solid var(--border); border-radius: var(--radius); background: transparent; font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 500; color: var(--text); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+#reverse-btn:hover { background: var(--green-light); border-color: var(--green-mid); }
+#reverse-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── ステータス ── */
+.status { text-align: center; font-size: 13px; color: var(--text-muted); min-height: 20px; }
+.status.error { color: #c0392b; }
+.status.success { color: var(--green); font-weight: 500; }
+
+/* ── スタッツ ── */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.stat { background: var(--green-light); border-radius: 12px; padding: 12px; text-align: center; }
+.stat-label { font-size: 10px; color: #0F6E56; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.stat-value { font-size: 18px; font-weight: 600; color: #085041; }
+
+/* ── 標高チャート ── */
+#elev-section { display: none; }
+#elev-canvas { width: 100%; height: 80px; display: block; border-radius: 8px; }
+
+/* ── バッジ ── */
+.badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.badge-circle { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 2px solid var(--border); }
+.badge-circle.earned { border-color: var(--green); background: var(--green-light); }
+.badge-label { font-size: 10px; color: var(--text-muted); text-align: center; }
+.badge-label.earned { color: #0F6E56; font-weight: 500; }
+.total-km { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
+.total-km span { font-weight: 600; color: var(--green); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 24 24"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg>
+  </div>
+  <div>
+    <h1>runywhere</h1>
+    <p>旅行先・出張先でも即座にコース作成</p>
+  </div>
+</header>
+
+<main>
+
+  <!-- インテント選択 -->
+  <div class="card">
+    <div class="card-title">今日の走り方</div>
+    <div class="intent-grid">
+      <button class="intent-btn active" data-intent="easy" onclick="selectIntent(this)">
+        <span class="intent-icon">🌿</span>軽く流したい
+        <span class="intent-sub">ゆっくりペース・短め</span>
+      </button>
+      <button class="intent-btn" data-intent="distance" onclick="selectIntent(this)">
+        <span class="intent-icon">📏</span>距離を伸ばしたい
+        <span class="intent-sub">しっかり走る</span>
+      </button>
+      <button class="intent-btn" data-intent="explore" onclick="selectIntent(this)">
+        <span class="intent-icon">🗺️</span>新しい道を試したい
+        <span class="intent-sub">知らない道へ</span>
+      </button>
+      <button class="intent-btn" data-intent="recovery" onclick="selectIntent(this)">
+        <span class="intent-icon">💆</span>回復走
+        <span class="intent-sub">ゆっくり・短め</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 距離 -->
+  <div class="card">
+    <div class="card-title">距離</div>
+    <div class="dist-buttons">
+      <button class="dist-btn active" data-km="3">3 km</button>
+      <button class="dist-btn" data-km="5">5 km</button>
+      <button class="dist-btn" data-km="10">10 km</button>
+    </div>
+    <div class="custom-row">
+      <input type="number" id="custom-km" placeholder="自由入力" min="1" max="50" step="0.5" />
+      <span>km</span>
+    </div>
+  </div>
+
+  <!-- コースタイプ -->
+  <div class="card">
+    <div class="card-title">コースタイプ</div>
+    <div class="type-row">
+      <button class="type-btn active" data-type="road" onclick="selectType(this)">🏙️ ロード</button>
+      <button class="type-btn" data-type="trail" onclick="selectType(this)">🌲 トレイル</button>
+      <button class="type-btn" data-type="walk" onclick="selectType(this)">🚶 ウォーキング</button>
+    </div>
+  </div>
+
+  <!-- コース条件 -->
+  <div class="card">
+    <div class="card-title">コースの条件</div>
+    <div class="tags">
+      <div class="tag active" id="tag-park">🌿 公園・緑道優先</div>
+      <div class="tag active" id="tag-loop">🔄 周回コース</div>
+      <div class="tag active" id="tag-flat">📉 高低差少なめ</div>
+      <div class="tag active" id="tag-signal">🚦 信号少なめ</div>
+    </div>
+  </div>
+
+  <!-- 地図 -->
+  <div id="map"></div>
+
+  <!-- ボタン行 -->
+  <div class="btn-row">
+    <button id="generate-btn">現在地からコースを生成</button>
+    <button id="reverse-btn" disabled onclick="reverseRoute()">🔄 往復に変換</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <!-- スタッツ -->
+  <div class="stats" id="stats" style="display:none">
+    <div class="stat"><div class="stat-label">距離</div><div class="stat-value" id="stat-dist">-</div></div>
+    <div class="stat"><div class="stat-label">タイム</div><div class="stat-value" id="stat-time">-</div></div>
+    <div class="stat"><div class="stat-label">獲得標高</div><div class="stat-value" id="stat-elev">-</div></div>
+    <div class="stat"><div class="stat-label">難易度</div><div class="stat-value" id="stat-diff">-</div></div>
+  </div>
+
+  <!-- 標高チャート -->
+  <div class="card" id="elev-section">
+    <div class="card-title">標高プロファイル</div>
+    <canvas id="elev-canvas"></canvas>
+  </div>
+
+  <!-- バッジ -->
+  <div class="card">
+    <div class="card-title">ランレベル</div>
+    <div class="total-km">累計走行距離: <span id="total-km-display">0.00</span> km</div>
+    <div class="badges" id="badges-container"></div>
+  </div>
+
+</main>
+
+<script>
+// ═══════════════════════════════════════════
+// ★ APIキーの設定（2箇所）
+// ═══════════════════════════════════════════
+
+// 【APIキー 1】OpenRouteService APIキー
+// 場所: このファイルの約280行目
+// 取得: https://openrouteservice.org/dev/#/signup（無料登録）
+const ORS_API_KEY = 'ここにOpenRouteServiceのAPIキーを貼り付けてください';
+
+// 【APIキー 2】OpenWeatherMap APIキー（天気機能・任意）
+// 場所: このファイルの約282行目
+// 取得: https://openweathermap.org/api（無料登録）
+// ※ 天気機能を使わない場合は空のままでOK
+const WEATHER_API_KEY = '';
+
+// ═══════════════════════════════════════════
+
+let map, userMarker, routeLayer, markerLayer;
+let userLat = null, userLng = null;
+let selectedKm = 3;
+let selectedIntent = 'easy';
+let selectedType = 'road';
+let currentCoords = null;
+let isReversed = false;
+let totalKm = parseFloat(localStorage.getItem('runywhere_total_km') || '0');
+
+// バッジ定義
+const BADGES = [
+  { km: 5,   icon: '🥉', label: '5km達成' },
+  { km: 10,  icon: '🥈', label: '10km達成' },
+  { km: 30,  icon: '🥇', label: '30km達成' },
+  { km: 50,  icon: '🏅', label: '50km達成' },
+  { km: 100, icon: '🏆', label: '100km達成' },
+];
+
+function initMap(lat, lng) {
+  if (map) { map.setView([lat, lng], 14); return; }
+  map = L.map('map').setView([lat, lng], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19
+  }).addTo(map);
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status' + (type ? ' ' + type : '');
+}
+
+function selectIntent(btn) {
+  document.querySelectorAll('.intent-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedIntent = btn.dataset.intent;
+  const presets = { easy: 3, distance: 8, explore: 5, recovery: 2 };
+  if (presets[selectedIntent]) {
+    selectedKm = presets[selectedIntent];
+    document.querySelectorAll('.dist-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.km == selectedKm);
+    });
+    document.getElementById('custom-km').value = '';
+  }
+}
+
+function selectType(btn) {
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedType = btn.dataset.type;
+}
+
+document.querySelectorAll('.dist-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.dist-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedKm = parseFloat(btn.dataset.km);
+    document.getElementById('custom-km').value = '';
+  });
+});
+
+document.getElementById('custom-km').addEventListener('input', e => {
+  if (e.target.value) {
+    document.querySelectorAll('.dist-btn').forEach(b => b.classList.remove('active'));
+    selectedKm = parseFloat(e.target.value) || 3;
+  }
+});
+
+document.querySelectorAll('.tag').forEach(tag => {
+  tag.addEventListener('click', () => tag.classList.toggle('active'));
+});
+
+function generateWaypoints(lat, lng, radiusM, count) {
+  const points = [[lng, lat]];
+  const offset = selectedIntent === 'explore' ? Math.random() * Math.PI : 0;
+  for (let i = 1; i <= count; i++) {
+    const angle = offset + (i / (count + 1)) * 2 * Math.PI;
+    const dlat = (radiusM * Math.sin(angle)) / 111000;
+    const dlng = (radiusM * Math.cos(angle)) / (111000 * Math.cos(lat * Math.PI / 180));
+    points.push([lng + dlng, lat + dlat]);
+  }
+  points.push([lng, lat]);
+  return points;
+}
+
+function getORSProfile() {
+  if (selectedType === 'trail') return 'foot-hiking';
+  if (selectedType === 'walk') return 'foot-walking';
+  return 'foot-walking';
+}
+
+async function generateCourse() {
+  const btn = document.getElementById('generate-btn');
+  btn.disabled = true;
+  isReversed = false;
+  setStatus('コースを計算中...');
+  document.getElementById('stats').style.display = 'none';
+  document.getElementById('elev-section').style.display = 'none';
+  document.getElementById('reverse-btn').disabled = true;
+
+  const targetM = selectedKm * 1000;
+  const radius = targetM / (2 * Math.PI) * 0.9;
+  const waypointCount = selectedKm <= 3 ? 3 : selectedKm <= 5 ? 4 : 6;
+  const waypoints = generateWaypoints(userLat, userLng, radius, waypointCount);
+  const preferFlat = document.getElementById('tag-flat').classList.contains('active');
+
+  try {
+    const body = {
+      coordinates: waypoints,
+      preference: preferFlat ? 'shortest' : 'recommended',
+      units: 'km',
+      elevation: true,
+      instructions: false
+    };
+
+    const res = await fetch(`https://api.openrouteservice.org/v2/directions/${getORSProfile()}/geojson`, {
+      method: 'POST',
+      headers: { 'Authorization': ORS_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error?.message || 'APIエラー');
+    }
+
+    const data = await res.json();
+    const feature = data.features[0];
+    const coords3d = feature.geometry.coordinates;
+    const coords = coords3d.map(c => [c[1], c[0]]);
+    const elevations = coords3d.map(c => c[2] || 0);
+    const summary = feature.properties.summary;
+
+    currentCoords = coords;
+    drawRoute(coords);
+    showStats(summary, elevations);
+    drawElevationChart(elevations, coords);
+
+    // 走行距離を記録
+    const distKm = parseFloat((summary.distance).toFixed(2));
+    totalKm += distKm;
+    localStorage.setItem('runywhere_total_km', totalKm.toFixed(2));
+    updateBadges();
+
+    document.getElementById('reverse-btn').disabled = false;
+    setStatus('コースを生成しました！', 'success');
+
+  } catch (e) {
+    console.error(e);
+    setStatus('コース生成に失敗しました: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+}
+
+function drawRoute(coords) {
+  if (routeLayer) map.removeLayer(routeLayer);
+  if (markerLayer) map.removeLayer(markerLayer);
+  routeLayer = L.polyline(coords, { color: '#1D9E75', weight: 5, opacity: 0.9 }).addTo(map);
+  map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+  markerLayer = L.layerGroup().addTo(map);
+  L.circleMarker(coords[0], { radius: 11, fillColor: '#1D9E75', color: '#fff', weight: 3, fillOpacity: 1 })
+    .bindPopup('スタート / ゴール').addTo(markerLayer);
+}
+
+function reverseRoute() {
+  if (!currentCoords) return;
+  isReversed = !isReversed;
+  const reversed = [...currentCoords].reverse();
+  drawRoute(reversed);
+  const btn = document.getElementById('reverse-btn');
+  btn.textContent = isReversed ? '↩️ 元のルートに戻す' : '🔄 往復に変換';
+  setStatus(isReversed ? '往復ルートに変換しました' : '元のルートに戻しました', 'success');
+}
+
+function showStats(summary, elevations) {
+  const distKm = summary.distance.toFixed(2);
+  const pace = selectedIntent === 'recovery' ? 8 : selectedIntent === 'easy' ? 7 : 6;
+  const mins = Math.round(summary.distance * pace);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const timeStr = h > 0 ? `${h}時間${m}分` : `${m}分`;
+  const ascent = Math.round(summary.ascent || 0);
+
+  let diff = '★☆☆';
+  if (ascent > 100) diff = '★★★';
+  else if (ascent > 40) diff = '★★☆';
+
+  document.getElementById('stat-dist').textContent = distKm + ' km';
+  document.getElementById('stat-time').textContent = timeStr;
+  document.getElementById('stat-elev').textContent = '+' + ascent + 'm';
+  document.getElementById('stat-diff').textContent = diff;
+  document.getElementById('stats').style.display = 'grid';
+}
+
+function drawElevationChart(elevations, coords) {
+  if (!elevations || elevations.every(e => e === 0)) return;
+  const canvas = document.getElementById('elev-canvas');
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.offsetWidth * dpr;
+  canvas.height = 80 * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const w = canvas.offsetWidth;
+  const h = 80;
+  const min = Math.min(...elevations);
+  const max = Math.max(...elevations);
+  const range = max - min || 1;
+  const pad = 6;
+
+  ctx.fillStyle = '#E1F5EE';
+  ctx.beginPath();
+  elevations.forEach((e, i) => {
+    const x = pad + (i / (elevations.length - 1)) * (w - pad * 2);
+    const y = h - pad - ((e - min) / range) * (h - pad * 2);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(w - pad, h - pad);
+  ctx.lineTo(pad, h - pad);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#1D9E75';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  elevations.forEach((e, i) => {
+    const x = pad + (i / (elevations.length - 1)) * (w - pad * 2);
+    const y = h - pad - ((e - min) / range) * (h - pad * 2);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = '#0F6E56';
+  ctx.font = '10px Outfit, sans-serif';
+  ctx.fillText(Math.round(max) + 'm', pad + 2, pad + 10);
+  ctx.fillText(Math.round(min) + 'm', pad + 2, h - pad - 2);
+
+  document.getElementById('elev-section').style.display = 'block';
+}
+
+function updateBadges() {
+  document.getElementById('total-km-display').textContent = totalKm.toFixed(2);
+  const container = document.getElementById('badges-container');
+  container.innerHTML = '';
+  BADGES.forEach(b => {
+    const earned = totalKm >= b.km;
+    container.innerHTML += `
+      <div class="badge-item">
+        <div class="badge-circle ${earned ? 'earned' : ''}">${earned ? b.icon : '🔒'}</div>
+        <div class="badge-label ${earned ? 'earned' : ''}">${b.label}</div>
+      </div>`;
+  });
+}
+
+document.getElementById('generate-btn').addEventListener('click', () => {
+  if (!userLat) {
+    setStatus('位置情報を取得中...');
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        userLat = pos.coords.latitude; userLng = pos.coords.longitude;
+        initMap(userLat, userLng);
+        if (userMarker) map.removeLayer(userMarker);
+        userMarker = L.circleMarker([userLat, userLng], {
+          radius: 9, fillColor: '#378ADD', color: '#fff', weight: 2.5, fillOpacity: 1
+        }).addTo(map).bindPopup('現在地').openPopup();
+        generateCourse();
+      },
+      () => {
+        userLat = 35.6812; userLng = 139.7671;
+        setStatus('位置情報を取得できませんでした。東京駅周辺でデモを表示します。');
+        initMap(userLat, userLng);
+        userMarker = L.circleMarker([userLat, userLng], {
+          radius: 9, fillColor: '#378ADD', color: '#fff', weight: 2.5, fillOpacity: 1
+        }).addTo(map);
+        generateCourse();
+      },
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  } else {
+    generateCourse();
+  }
+});
+
+initMap(35.6812, 139.7671);
+updateBadges();
+</script>
+</body>
+</html>
